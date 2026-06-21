@@ -1,0 +1,27 @@
+[package]
+name = "quicforge-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Domain core for QuicForge: ports, the BenchEngine orchestrator, run events, and HDR-histogram latency aggregation."
+
+[dependencies]
+quicforge-types = { workspace = true }
+quicforge-resilience = { workspace = true }
+async-trait = { workspace = true }
+hdrhistogram = { workspace = true }
+metrics = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json = { workspace = true }

@@ -1,0 +1,50 @@
+[package]
+name = "quicforge-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Composition root + CLI for QuicForge: axum + async-graphql HTTP/WS server and a CLI benchmark harness with HDR latency reporting."
+
+[features]
+default = []
+# Enable the real quinn-based QUIC transport + echo server.
+quic = ["quicforge-infra/quic"]
+
+[lib]
+name = "quicforge_node"
+path = "src/lib.rs"
+
+[[bin]]
+name = "quicforge-node"
+path = "src/main.rs"
+
+[dependencies]
+quicforge-types = { workspace = true }
+quicforge-core = { workspace = true }
+quicforge-infra = { workspace = true }
+quicforge-api = { workspace = true }
+
+axum = { workspace = true }
+async-graphql = { workspace = true }
+async-graphql-axum = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+clap = { workspace = true }
+dotenvy = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tower = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "round_trip_bench"
+harness = false

@@ -1,0 +1,25 @@
+services:
+  node:
+    build: .
+    environment:
+      QUICFORGE_HOST: 0.0.0.0
+      QUICFORGE_PORT: 8080
+      QUICFORGE_LOG_JSON: "true"
+      RUST_LOG: info
+      # Transport used for benchmarks started over the GraphQL API.
+      # `loopback` (default) needs no network; `quic` uses the bundled QUIC stack.
+      QUICFORGE_TRANSPORT: loopback
+    ports:
+      - "8080:8080"
+    command: ["serve"]
+
+  # Optional metrics stack: `docker compose --profile monitoring up`.
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitoring"]
+    depends_on:
+      - node
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"

@@ -1,0 +1,22 @@
+[package]
+name = "quicforge-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "GraphQL API surface for QuicForge: schema, queries, a mutation, and a live run subscription (async-graphql v7)."
+
+[dependencies]
+quicforge-types = { workspace = true }
+quicforge-core = { workspace = true }
+async-graphql = { workspace = true }
+futures = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+quicforge-infra = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json = { workspace = true }

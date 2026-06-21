@@ -1,0 +1,104 @@
+{
+  "info": {
+    "name": "QuicForge API",
+    "description": "GraphQL (queries, mutation, subscription) + operational endpoints for QuicForge, a QUIC round-trip latency lab. Set the `baseUrl` collection variable (default http://localhost:8080). Start the server with `quicforge-node serve`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "GraphQL",
+      "item": [
+        {
+          "name": "startBenchmark (mutation)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql", "host": ["{{baseUrl}}"], "path": ["graphql"] },
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Start($input: BenchParamsInput!) {\n  startBenchmark(input: $input) {\n    id\n    target\n    connections\n    requestsPerConnection\n    totalRequests\n    state\n    completed\n    failureReason\n    stats {\n      samples\n      minNs\n      meanNs\n      p50Ns\n      p90Ns\n      p99Ns\n      p999Ns\n      maxNs\n      p50Micros\n      p99Micros\n      p999Micros\n    }\n    throughput {\n      requestsPerSec\n      bytesPerSec\n      megabitsPerSec\n    }\n    startedAt\n    finishedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"target\": \"127.0.0.1:0\",\n    \"connections\": 4,\n    \"requestsPerConnection\": 1000,\n    \"payloadBytes\": 1232\n  }\n}"
+              }
+            }
+          }
+        },
+        {
+          "name": "runs (query)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql", "host": ["{{baseUrl}}"], "path": ["graphql"] },
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Recent($limit: Int!) {\n  apiVersion\n  runs(limit: $limit) {\n    id\n    target\n    totalRequests\n    state\n    stats { samples p50Micros p99Micros p999Micros }\n    throughput { requestsPerSec megabitsPerSec }\n    startedAt\n    finishedAt\n  }\n}",
+                "variables": "{\n  \"limit\": 20\n}"
+              }
+            }
+          }
+        },
+        {
+          "name": "run by id (query)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql", "host": ["{{baseUrl}}"], "path": ["graphql"] },
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Run($id: String!) {\n  run(id: $id) {\n    id\n    state\n    completed\n    failureReason\n    stats { samples minNs meanNs p50Ns p90Ns p99Ns p999Ns maxNs }\n    throughput { requestsPerSec bytesPerSec megabitsPerSec }\n  }\n}",
+                "variables": "{\n  \"id\": \"00000000-0000-0000-0000-000000000000\"\n}"
+              }
+            }
+          }
+        },
+        {
+          "name": "runProgress (subscription, WS)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql/ws", "host": ["{{baseUrl}}"], "path": ["graphql", "ws"] },
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "subscription {\n  runProgress {\n    kind\n    runId\n    total\n    completed\n    failureReason\n    stats { samples p50Micros p99Micros }\n    throughput { requestsPerSec }\n    at\n  }\n}",
+                "variables": "{}"
+              }
+            },
+            "description": "GraphQL subscription over WebSocket at /graphql/ws (graphql-transport-ws). Postman's GraphQL WS support or a tool like `websocat` can be used to observe Started/Progress/Completed/Failed events while a benchmark runs."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operational",
+      "item": [
+        {
+          "name": "GET /health/live",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health/live", "host": ["{{baseUrl}}"], "path": ["health", "live"] }
+          }
+        },
+        {
+          "name": "GET /health/ready",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health/ready", "host": ["{{baseUrl}}"], "path": ["health", "ready"] }
+          }
+        },
+        {
+          "name": "GET /metrics (Prometheus)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] }
+          }
+        }
+      ]
+    }
+  ]
+}
