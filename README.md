@@ -16,6 +16,31 @@ suite.
 
 ---
 
+## Table of Contents
+
+- [Why this exists](#why-this-exists)
+- [Architecture](#architecture)
+  - [Component details](#component-details)
+  - [Architecture flows](#architecture-flows)
+- [The measurement model](#the-measurement-model)
+- [Quick start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Build & test](#build--test)
+  - [CLI benchmark](#cli-benchmark)
+  - [GraphQL server](#graphql-server)
+- [GraphQL API](#graphql-api)
+- [Operational endpoints](#operational-endpoints)
+  - [Metrics](#metrics)
+- [Profiling & flame graph](#profiling--flame-graph)
+- [Configuration](#configuration)
+- [Docker](#docker)
+- [Project layout](#project-layout)
+- [Testing & quality gates](#testing--quality-gates)
+  - [Test results](#test-results)
+- [License](#license)
+
+---
+
 ## Why this exists
 
 Landing transactions on Solana is a latency game played over QUIC against the leader's
@@ -393,6 +418,40 @@ cargo bench -p quicforge-node            # criterion: loopback_4x256_round_trips
 - `#![forbid(unsafe_code)]` in every crate.
 - The `quic` integration tests stand up a real `quinn` endpoint on `127.0.0.1:0` and
   benchmark against it end-to-end.
+
+### Test results
+
+Latest `cargo test --workspace --all-features` run (Rust 1.89.0) — **32 passed, 0 failed, 0 ignored**:
+
+| Suite | Tests | Result |
+|---|---:|:--|
+| `quicforge-infra` (unit) | 9 | ok |
+| `quicforge-resilience` (unit) | 6 | ok |
+| `quicforge-core` (unit) | 5 | ok |
+| `quicforge-types` (unit) | 5 | ok |
+| `quicforge-node` (unit) | 4 | ok |
+| `quicforge-api` (unit) | 3 | ok |
+| Doc-tests (6 crates) | 0 | ok |
+| **Total** | **32** | **ok** |
+
+<details>
+<summary>Raw <code>cargo test</code> summary</summary>
+
+```text
+   Running unittests src/lib.rs (quicforge_infra)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+   Running unittests src/lib.rs (quicforge_resilience)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+   Running unittests src/lib.rs (quicforge_core)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+   Running unittests src/lib.rs (quicforge_types)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+   Running unittests src/lib.rs (quicforge_node)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+   Running unittests src/lib.rs (quicforge_api)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+</details>
 
 See [`EVALUATION.md`](EVALUATION.md) for how the codebase maps to each engineering
 guideline.
