@@ -70,6 +70,107 @@ nothing about QUIC, axum, or GraphQL.
 **Why no `ai` crate?** QuicForge is a pure-networking/latency tool — adding an LLM layer
 would be scope creep. (Its sibling project SolLander demonstrates the AI-advisor layer.)
 
+### Component details
+
+Every component maps to a box in the diagram. Dependencies point inward
+(`node → api / infra / core → types`, with `resilience` a leaf utility); each crate carries
+`#![forbid(unsafe_code)]`.
+
+#### `quicforge-types` — domain vocabulary (zero I/O)
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `params.rs` | `BenchParams`, `PayloadSize`, `ConnectionCount`, `RequestCount` | Validated newtypes — an out-of-range benchmark config cannot be constructed. |
+| `run.rs` | `RunId`, `RunStatus`, `RunSummary` | The run lifecycle and its final percentile/throughput summary. |
+| `stats.rs` | latency stat types | The percentile snapshot (min/mean/p50/p90/p99/p99.9/max) the histogram reduces to. |
+| `error.rs` | validation errors | Typed boundary errors with stable codes. |
+
+#### `quicforge-resilience` — latency-safe guards (leaf)
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `lib.rs` | `with_timeout`, `RetryPolicy` | Deadline wrapper + exponential-backoff-with-jitter retry. **Deliberately no breaker/limiter** — they would distort the latencies under measurement. |
+
+#### `quicforge-core` — engine + ports (inside the hexagon)
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `ports.rs` | `QuicConnector`, `QuicConnection`, `RunRepository`, `EventSink`, `RunEventStream`, `Clock` | The hexagonal ports the engine depends on — the transport seam is `QuicConnector`. |
+| `engine.rs` | `BenchEngine`, `BenchDeps` | The **hot path**: spawns one worker task per connection, drives round-trips, folds results into a `RunSummary`. |
+| `histo.rs` | HDR aggregation | Per-worker `hdrhistogram` recording + lossless merge for exact percentiles. |
+| `config.rs` | `EngineConfig` | Timeouts and engine tunables. |
+| `events.rs` | `RunEvent` | `Started` / `Progress` / `Completed` / `Failed` fan-out events. |
+| `error.rs` | `PortError`, `CoreError` | Adapter-fault vs domain-outcome separation. |
+
+#### `quicforge-infra` — adapters (outside the hexagon)
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `quic.rs` | `QuinnConnector`, `QuicEchoServer` | Real QUIC transport via `quinn` (`quic` feature) + a self-spawnable echo server. |
+| `sim.rs` | `LoopbackConnector`, `LoopbackConnection` | In-process deterministic transport (default) — measures orchestration with no socket noise. |
+| `repo.rs` | `MemoryRunRepository` | In-memory `RunRepository` read model. |
+| `events.rs` | `BroadcastEventSink` | `tokio::broadcast` bus implementing `EventSink` + the subscription stream. |
+| `clock.rs` | `SystemClock` | Wall-clock adapter. |
+
+#### `quicforge-api` — GraphQL surface
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `schema.rs` | schema builder | Assembles the schema + DoS limits. |
+| `query.rs` | `QueryRoot` | `apiVersion`, `run`, `runs`. |
+| `mutation.rs` | `MutationRoot` | `startBenchmark` — runs a benchmark and returns its `RunSummary`. |
+| `subscription.rs` | `SubscriptionRoot` | `runProgress` over WebSocket. |
+| `types.rs` | GraphQL objects/inputs | Anti-corruption layer between domain types and the wire. |
+
+#### `quicforge-node` — composition root (binary)
+
+| Module | Key items | Responsibility |
+|---|---|---|
+| `main.rs` | CLI entry | `serve` / `bench` via `clap`. |
+| `config.rs` | node config | CLI/env → `EngineConfig` + transport selection. |
+| `startup.rs` | axum wiring | HTTP + WS routes, `/metrics`, graceful shutdown. |
+| `telemetry.rs` | observability | `tracing` (text/JSON) + Prometheus recorder. |
+| `bench.rs` | `bench` job | The CLI benchmark command and its report. |
+
+### Architecture flows
+
+**1 · Benchmark run flow** (`mutation startBenchmark` / CLI `bench`)
+
+```mermaid
+flowchart TD
+  P[BenchParams] --> R[BenchEngine run]
+  R --> ST[save Started]
+  ST --> SP[spawn N connection workers]
+  SP --> W[worker: connect retry plus timeout]
+  W --> RT[R round trips, timeout each]
+  RT --> H[record into per-worker HDR histogram]
+  H --> MG[merge worker histograms]
+  MG --> SM[RunSummary percentiles]
+  SM --> UP[update repo plus publish Completed]
+```
+
+`BenchEngine::run` persists the run as `Started`, then spawns **one Tokio task per connection**.
+Each worker connects through a `RetryPolicy`- and `with_timeout`-guarded `QuicConnector`, issues
+`requests_per_connection` round-trips (each timeout-bounded and timed), and records every sample
+into a per-worker HDR histogram. The histograms merge losslessly into an exact-percentile
+`RunSummary`, which is written back and published as `Completed`.
+
+**2 · Per-connection worker flow** — `QuicConnector::connect` (retry + timeout) → loop
+`round_trip` (timeout each, `Instant`-timed) → record into HDR → `close`. A transport failure
+folds into `RunStatus::Failed { reason }` rather than collapsing the whole run.
+
+**3 · Subscription / progress flow** — `runProgress` subscribes to the `BroadcastEventSink`;
+`Started` / `Progress` / `Completed` / `Failed` events stream to all WebSocket subscribers.
+
+**4 · Read-model query flow** — `run(id)` and `runs(limit)` read from `MemoryRunRepository`.
+
+**5 · Transport-selection flow** — the same engine runs over either the `LoopbackConnector`
+(default, deterministic) or the real `QuinnConnector` + optional self-spawned `QuicEchoServer`
+(`quic` feature). The core never changes — only which adapter is wired behind `QuicConnector`.
+
+**6 · Bootstrap / serve flow** — `main` → `telemetry::init` → build `BenchEngine` + schema →
+`startup` mounts HTTP + WS routes → serve until SIGINT/SIGTERM triggers graceful shutdown.
+
 ---
 
 ## The measurement model
@@ -191,6 +292,44 @@ A Postman collection is provided in [`postman/QuicForge.postman_collection.json`
 ```bash
 docker compose --profile monitoring up   # node + Prometheus on :9090
 ```
+
+---
+
+## Profiling & flame graph
+
+The engine hot path is profiled in-process with the [`pprof`](https://github.com/tikv/pprof-rs)
+sampling profiler wired into the criterion bench — **no `perf`, root, or kernel tuning required**
+(it works inside WSL2/containers where `perf` usually does not). A `SIGPROF` timer samples the
+call stack at 1 kHz and [`inferno`](https://github.com/jonhoo/inferno) renders the SVG. The
+bench runs over the `LoopbackConnector`, so the picture isolates orchestration + HDR-aggregation
+overhead from socket/QUIC noise.
+
+[![QuicForge loopback flame graph](docs/flamegraph.svg)](docs/flamegraph.svg)
+
+> The inline image is a snapshot — open [`docs/flamegraph.svg`](docs/flamegraph.svg) directly for
+> the interactive, zoomable version.
+
+Regenerate it any time:
+
+```bash
+cargo bench -p quicforge-node --bench round_trip_bench -- --profile-time 10 'loopback_4x256_round_trips'
+cp target/criterion/loopback_4x256_round_trips/profile/flamegraph.svg docs/flamegraph.svg
+```
+
+**Reading the graph** (4 connections x 256 loopback round-trips; width = share of on-CPU
+samples). The stack under `BenchEngine::run` matches the measurement model:
+
+- **`tokio::spawn` task frames** — the one-worker-task-per-connection model (visible as task
+  `Cell` create/drop frames).
+- **`LoopbackConnection::round_trip` + `with_timeout`** — the timeout-bounded per-request path.
+- **`hdrhistogram::HistogramIterator` / `PickyIterator::pick`** — percentile merge + iteration at
+  summary time (the cost of exact tail latencies).
+- **`RunRepository::save` / `update` + `EventSink::publish`** — run-lifecycle writes and events.
+- **`Clock::now`** — the per-round-trip timestamps.
+
+With the network factored out, the visible cost is the **round-trip orchestration, the timeout
+wrapper, and the HDR percentile machinery** — exactly the overhead a latency lab needs to keep
+small so it does not pollute its own measurements.
 
 ---
 

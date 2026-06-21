@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use pprof::criterion::{Output, PProfProfiler};
 
 use quicforge_core::{BenchDeps, BenchEngine, EngineConfig};
 use quicforge_infra::{BroadcastEventSink, LoopbackConnector, MemoryRunRepository, SystemClock};
@@ -43,5 +44,9 @@ fn bench_loopback(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_loopback);
+criterion_group! {
+    name = benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(1_000, Output::Flamegraph(None)));
+    targets = bench_loopback
+}
 criterion_main!(benches);

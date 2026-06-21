@@ -76,6 +76,7 @@ chrono = { version = "0.4", features = ["serde"] }
 criterion = { version = "0.5", features = ["async_tokio"] }
 proptest = "1.5"
 mockall = "0.12"
+pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 
 # --- internal crates ---
 quicforge-types = { path = "crates/quicforge-types" }
@@ -91,3 +92,9 @@ codegen-units = 1
 debug = false
 panic = "abort"
 strip = "symbols"
+
+# Benchmarks keep debug symbols so the pprof sampling profiler can symbolicate
+# flame graphs (`cargo bench --bench <name> -- --profile-time <secs>`).
+[profile.bench]
+debug = true
+strip = false
