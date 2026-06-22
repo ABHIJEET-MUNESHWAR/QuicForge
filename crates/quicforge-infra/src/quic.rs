@@ -75,8 +75,8 @@ impl QuinnConnector {
             .with_no_client_auth();
         crypto.alpn_protocols = vec![ECHO_ALPN.to_vec()];
 
-        let quic_crypto = QuicClientConfig::try_from(crypto)
-            .map_err(|e| transport_err("quic client crypto", e))?;
+        let quic_crypto =
+            QuicClientConfig::try_from(crypto).map_err(|e| transport_err("quic client crypto", e))?;
         let client_config = quinn::ClientConfig::new(Arc::new(quic_crypto));
 
         let socket = tuned_udp_socket(bind)?;
@@ -208,15 +208,20 @@ async fn accept_loop(endpoint: Endpoint) {
 }
 
 async fn serve_connection(conn: quinn::Connection) {
-    // Loop ends when `accept_bi` errors (connection closed or lost).
-    while let Ok((mut send, mut recv)) = conn.accept_bi().await {
-        tokio::spawn(async move {
-            if let Ok(data) = recv.read_to_end(MAX_ECHO_BYTES).await {
-                let _ = send.write_all(&data).await;
-                let _ = send.finish();
-                let _ = send.stopped().await;
+    loop {
+        match conn.accept_bi().await {
+            Ok((mut send, mut recv)) => {
+                tokio::spawn(async move {
+                    if let Ok(data) = recv.read_to_end(MAX_ECHO_BYTES).await {
+                        let _ = send.write_all(&data).await;
+                        let _ = send.finish();
+                        let _ = send.stopped().await;
+                    }
+                });
             }
-        });
+            // Connection closed or errored: stop serving it.
+            Err(_) => break,
+        }
     }
 }
 

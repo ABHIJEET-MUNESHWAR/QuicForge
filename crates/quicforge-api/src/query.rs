@@ -26,11 +26,7 @@ impl QueryRoot {
     async fn run(&self, ctx: &Context<'_>, id: String) -> Result<Option<RunSummaryObject>> {
         let api = ctx.data_unchecked::<ApiContext>();
         let uuid = uuid::Uuid::parse_str(&id).map_err(to_err)?;
-        let summary = api
-            .engine
-            .get(RunId::from_uuid(uuid))
-            .await
-            .map_err(to_err)?;
+        let summary = api.engine.get(RunId::from_uuid(uuid)).await.map_err(to_err)?;
         Ok(summary.as_ref().map(RunSummaryObject::from))
     }
 
