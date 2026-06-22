@@ -13,9 +13,7 @@ pub use config::EngineConfig;
 pub use engine::{BenchDeps, BenchEngine};
 pub use error::{CoreError, PortError};
 pub use events::RunEvent;
-pub use ports::{
-    Clock, EventSink, QuicConnection, QuicConnector, RunEventStream, RunRepository,
-};
+pub use ports::{Clock, EventSink, QuicConnection, QuicConnector, RunEventStream, RunRepository};
 
 #[cfg(test)]
 mod tests {
@@ -148,8 +146,10 @@ mod tests {
 
     #[tokio::test]
     async fn connect_failure_marks_run_failed() {
-        let mut config = EngineConfig::default();
-        config.connect_retries = 1;
+        let config = EngineConfig {
+            connect_retries: 1,
+            ..Default::default()
+        };
         let events = Arc::new(FakeEvents::default());
         let deps = BenchDeps {
             connector: failing_connector(),
